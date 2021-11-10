@@ -1,4 +1,4 @@
-// SERVIDOR HTTP (RESTful API)
+// SERVIDOR HTTP (RPC y TCP)
 
 package main
 
@@ -8,6 +8,7 @@ import (
     "bufio"
     "net"
     "net/rpc"
+    // "errors"
 )
 
 type Msg struct {
@@ -19,22 +20,25 @@ type Info struct {
 }
 type Server struct {
     MsgStored []Msg
-    Info map[string]Info
+    Info Info
 }
+type RpcEntity struct {
+    ServerData map[string]Server
+}
+var RpcIns *RpcEntity
 
-func (t *Server) GetServerInfo(args *int, res *Info) error {
-    // res = &t.Info
-    fmt.Println("Sí funka")
+func (t *RpcEntity) GetServerInfo(url *string, res *Info) error {
+    *(res) = t.ServerData[*url].Info
     return nil
 }
 
-func handleRPC(info Info, port string) {
-    ln, err := net.Listen("tcp", ":" + port)
+func handleRPC(info Info, addr string) {
+    ln, err := net.Listen("tcp", addr)
     if err != nil {
         fmt.Println(err)
         return
     }
-    // Server.Info[info.Port]
+    (*RpcIns).ServerData[addr] = Server{ Info: info }
     for {
         c, err := ln.Accept()
         if err != nil {
@@ -48,22 +52,21 @@ func handleRPC(info Info, port string) {
 func main() {
     var info Info
     scanner := bufio.NewScanner(os.Stdin)
-    ports := []string{ "9001", "9002", "9003" }
-    server := new(Server)
-    rpc.Register(server)
+    addrs := []string{ ":9001", ":9002", ":9003" }
+    rpc_e := new(RpcEntity)
+    rpc.Register(rpc_e)
     rpc.HandleHTTP()
+    // Se guarda la instancia del servidor RPC en la variable global (singleton)
+    RpcIns = rpc_e
+    (*RpcIns).ServerData = make(map[string]Server)
 
     // Obtiene un puerto abierto libre para alojar el servidor
-    for i, v := range ports {
+    for _, v := range addrs {
         fmt.Print("\nTemática de la sala de chat: ")
         scanner.Scan()
         info.Topic = scanner.Text()
-
-        fmt.Println("Ejecutando server con temática " + info.Topic + " en el puerto " + v)
-        if (i == len(ports) - 1) {
-            break
-        }
+        fmt.Println("Ejecutando servidor sobre temática \"" + info.Topic + "\" en la dirección " + v)
         go handleRPC(info, v)
     }
-    handleRPC(info, ports[len(ports) - 1])
+    fmt.Scanln()
 }
