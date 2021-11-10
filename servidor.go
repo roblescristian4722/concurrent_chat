@@ -4,10 +4,10 @@ package main
 
 import (
     "fmt"
-    "net/http"
     "os"
     "bufio"
-    "encoding/json"
+    "net"
+    "net/rpc"
 )
 
 type Msg struct {
@@ -16,40 +16,54 @@ type Msg struct {
 type Info struct {
     UserCount uint64
     Topic string
-    Port string
-    Ip string
-
 }
-var MsgStored []Msg
-var ServerInfo []Info
+type Server struct {
+    MsgStored []Msg
+    Info map[string]Info
+}
 
-func GetServerInfo(res http.ResponseWriter, req *http.Request) {
-    json_res, err := json.MarshalIndent(ServerInfo, "", "    ")
+func (t *Server) GetServerInfo(args *int, res *Info) error {
+    // res = &t.Info
+    fmt.Println("Sí funka")
+    return nil
+}
+
+func handleRPC(info Info, port string) {
+    ln, err := net.Listen("tcp", ":" + port)
     if err != nil {
-        http.Error(res, err.Error(), http.StatusInternalServerError)
+        fmt.Println(err)
         return
     }
-    res.Header().Set("Content-Type", "application-json")
-    res.Write(json_res)
+    // Server.Info[info.Port]
+    for {
+        c, err := ln.Accept()
+        if err != nil {
+            fmt.Println(err)
+            continue
+        }
+        go rpc.ServeConn(c)
+    }
 }
 
 func main() {
+    var info Info
     scanner := bufio.NewScanner(os.Stdin)
     ports := []string{ "9001", "9002", "9003" }
+    server := new(Server)
+    rpc.Register(server)
+    rpc.HandleHTTP()
 
     // Obtiene un puerto abierto libre para alojar el servidor
     for i, v := range ports {
-        var info Info
         fmt.Print("\nTemática de la sala de chat: ")
         scanner.Scan()
         info.Topic = scanner.Text()
-        info.Port = v
-        ServerInfo = append(ServerInfo, info)
-        fmt.Println("Ejecutando server con temática " + info.Topic + " en el puerto " + info.Port)
+
+        fmt.Println("Ejecutando server con temática " + info.Topic + " en el puerto " + v)
         if (i == len(ports) - 1) {
             break
         }
-        go http.ListenAndServe(":" + v, nil)
+        go handleRPC(info, v)
     }
-    http.ListenAndServe(":" + ServerInfo[len(ServerInfo) - 1].Port, nil)
+    handleRPC(info, ports[len(ports) - 1])
 }

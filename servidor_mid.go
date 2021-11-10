@@ -3,8 +3,8 @@ package main
 
 import (
     "fmt"
-    "net/http"
-    "encoding/json"
+    "net/rpc"
+    // "net/http"
 )
 
 type Msg struct {
@@ -12,16 +12,30 @@ type Msg struct {
 }
 type Info struct {
     UserCount uint64
-    Topic string
+    Topic, Port string
 }
 
-func GetServers(res http.ResponseWriter, req *http.Request) {
+// func GetServers(res http.ResponseWriter, req *http.Request) {
+// }
+
+func GetServerInfo(port string) {
+    c, err := rpc.Dial("tcp", ":" + port)
+    if err != nil {
+        fmt.Println(err)
+        return
+    }
+    var info Info
+    var tmp int
+    err = c.Call("Server.GetServerInfo", tmp, &info)
+    if err != nil {
+        fmt.Println(err)
+    }
 }
 
 func main() {
-    // Peticiones HTTP
-    http.HandleFunc("/info", GetServers)
-
-    fmt.Println("Iniciando servidor http...")
-    http.ListenAndServe(":9000", nil)
+    ports := []string{ "9001", "9002", "9003" }
+    for _, v := range ports {
+        go GetServerInfo(v)
+    }
+    fmt.Scanln()
 }
