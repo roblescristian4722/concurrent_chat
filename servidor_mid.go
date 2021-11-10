@@ -1,10 +1,11 @@
-// SERVIDOR MIDDLEWARE (RPC y TCP)
+// SERVIDOR MIDDLEWARE (RPC)
 package main
 
 import (
     "fmt"
     "net"
     "net/rpc"
+    "errors"
 )
 
 type Msg struct {
@@ -12,54 +13,61 @@ type Msg struct {
 }
 type Info struct {
     UserCount uint64
-    Topic string
+    Topic, TcpAddr, RpcAddr string
 }
-type RpcEntity struct {
-    ServerData map[string]Info
-}
+type RpcEntity []Info
 var RpcIns *RpcEntity
-var addrs []string
-var mid_addrs string
 
-
-// Mid-Server's microservices for client to use
-func (t *RpcEntity) GetServerTopics(req *string, res *[]string) error {
-    var tmp []string
-    for _, v := range addrs {
-        GetServerInfo(v)
+func (t *RpcEntity) GetServerTopics(req *string, res *[]Info) error {
+    for i := range (*RpcIns) {
+        GetServerInfo(&(*RpcIns)[i])
     }
-    for _, v := range (*RpcIns).ServerData {
-        tmp = append(tmp, v.Topic)
+    for _, v := range (*RpcIns) {
+        (*res) = append((*res), Info {
+            UserCount: v.UserCount,
+            Topic: v.Topic,
+        })
     }
-    (*res) = tmp
     return nil
 }
 
-func GetServerInfo(addr string) {
+func (t *RpcEntity) GetServerAddr(topic *string, addr *string) error {
+    for _, v := range (*RpcIns) {
+        if v.Topic == *topic {
+            (*addr) = v.TcpAddr
+            return nil
+        }
+    }
+    return errors.New("No existe un chat con la temática " + *topic)
+}
+
+func GetServerInfo(info *Info) {
+    addr := info.RpcAddr
     c, err := rpc.Dial("tcp", addr)
     if err != nil {
         fmt.Println(err)
         return
     }
-    var info Info
-    err = c.Call("RpcEntity.GetServerInfo", &addr, &info)
+    err = c.Call("ServerInstances.GetServerInfo", &addr, &info)
     if err != nil {
         fmt.Println(err)
         return
     }
-    (*RpcIns).ServerData[addr] = info
 }
 
 func main() {
-    addrs = []string{ ":9001", ":9002", ":9003" }
-    mid_addrs = ":9000"
+    mid_addrs := ":9000"
 
     // Creación del server RPC para conectar con el cliente
     rpc_e := new(RpcEntity)
     rpc.Register(rpc_e)
     rpc.HandleHTTP()
     RpcIns = rpc_e
-    (*RpcIns).ServerData = make(map[string]Info)
+        (*RpcIns) = []Info {
+        Info{ RpcAddr: ":9001" },
+        Info{ RpcAddr: ":9002" },
+        Info{ RpcAddr: ":9003" },
+    }
     ln, err := net.Listen("tcp", mid_addrs)
     if err != nil {
         fmt.Println(err)
