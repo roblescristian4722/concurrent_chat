@@ -8,9 +8,6 @@ import (
     "errors"
 )
 
-type Msg struct {
-    Sender, Content string
-}
 type Info struct {
     UserCount uint64
     Topic, TcpAddr, RpcAddr string
@@ -48,7 +45,9 @@ func GetServerInfo(info *Info) {
         fmt.Println(err)
         return
     }
-    err = c.Call("ServerInstances.GetServerInfo", &addr, &info)
+    var tmp Info
+    err = c.Call("ServerInstances.GetServerInfo", &addr, &tmp)
+    *info = tmp
     if err != nil {
         fmt.Println(err)
         return
@@ -57,7 +56,6 @@ func GetServerInfo(info *Info) {
 
 func main() {
     mid_addrs := ":9000"
-
     // Creación del server RPC para conectar con el cliente
     rpc_e := new(RpcEntity)
     rpc.Register(rpc_e)

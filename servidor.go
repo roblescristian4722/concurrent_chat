@@ -7,12 +7,21 @@ import (
     "bufio"
     "net"
     "net/rpc"
+    "encoding/gob"
+)
+
+const (
+    KILL = iota
+    ADD
+    MSG
 )
 
 // Representa cada mensaje enviado por un cliente
 type Msg struct {
     Sender, Content string
+    Type int
 }
+
 // Información de cada servidor tcp
 type Info struct {
     UserCount uint64
@@ -29,9 +38,10 @@ type ServerInstances map[string] *Server
 // Instancia singleton para poder acceder a las instancias del server en cualquier
 // parte del programa
 var RpcIns *ServerInstances
+var Active []*net.Conn
 
 func (t *ServerInstances) GetServerInfo(url *string, res *Info) error {
-    *(res) = (*t)[*url].Info
+    *(res) = (*(*t)[*url]).Info
     return nil
 }
 
@@ -52,12 +62,13 @@ func handleRPC(info Info, addr string) {
 }
 
 func handleTCP(rpc string) {
-    client_status := make(chan string)
+    client_status := make(chan Msg)
     ln, err := net.Listen("tcp", (*RpcIns)[rpc].Info.TcpAddr)
     if err != nil {
         fmt.Println(err)
         return
     }
+    go handlePetitionType(client_status)
     for {
         c, err := ln.Accept()
         if err != nil {
@@ -68,8 +79,34 @@ func handleTCP(rpc string) {
     }
 }
 
-func handleClient(c net.Conn, rpc string, client_status chan string) {
-    (*RpcIns)[rpc].Info.UserCount = uint64(1)
+func handlePetitionType(client_status chan Msg) {
+    
+}
+
+func handleClient(c net.Conn, rpc string, client_status chan Msg) {
+    defer c.Close()
+    (*(*RpcIns)[rpc]).Info.UserCount++
+    Active = append(Active, &c)
+    msg := Msg{}
+    for {
+        err := gob.NewDecoder(c).Decode(&msg)
+        if err == nil {
+            switch msg.Type {
+            case KILL:
+                for i, v := range Active {
+                    if v == &c {
+                        Active = append(Active[:i], Active[i + 1:]...)
+                        break
+                    }
+                }
+                (*(*RpcIns)[rpc]).Info.UserCount--
+                break
+            case ADD:
+
+            case MSG:
+            }
+        }
+    }
 }
 
 func main() {
@@ -85,7 +122,7 @@ func main() {
     RpcIns = rpc_e
     *RpcIns = make(map[string]*Server)
 
-    // Obtiene un puerto abierto libre para alojar el servidor
+    // Se obtiene la información para crear los servidores RPC
     for i, v := range addrs {
         fmt.Print("\nTemática de la sala de chat: ")
         scanner.Scan()
