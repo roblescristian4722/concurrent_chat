@@ -17,14 +17,16 @@ var RpcIns *RpcEntity
 
 func (t *RpcEntity) GetServerTopics(req *string, res *[]Info) error {
     for i := range (*RpcIns) {
-        GetServerInfo(&(*RpcIns)[i])
+        GetServerInfo((&(*RpcIns)[i]))
     }
+    tmp := []Info{}
     for _, v := range (*RpcIns) {
-        (*res) = append((*res), Info {
+        tmp = append(tmp, Info {
             UserCount: v.UserCount,
             Topic: v.Topic,
         })
     }
+    (*res) = tmp
     return nil
 }
 

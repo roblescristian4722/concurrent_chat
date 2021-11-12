@@ -120,7 +120,7 @@ func handleConn(client_status chan Msg, c *net.Conn, cId uint64, rpc string) {
         case s := <-client_status:
             if s.Type == KILL {
                 if s.Id == cId {
-                    (*RpcIns)[rpc].Info.UserCount--
+                    (*(*RpcIns)[rpc]).Info.UserCount--
                     (*c).Close()
                     return
                 }

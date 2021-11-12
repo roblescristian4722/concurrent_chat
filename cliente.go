@@ -120,7 +120,7 @@ func main() {
     c, opt := connectToMiddle(mid_addrs, &server_info)
     for opt != 0 {
         // Se muestran las salas de chat disponibles al usuario
-        fmt.Println("\nChats disponibles")
+        fmt.Println("\n<<Chats disponibles>>")
         for i, v := range server_info {
             fmt.Printf("%d) %s (%d clientes conectados)\n", i + 1, v.Topic, v.UserCount)
         }
