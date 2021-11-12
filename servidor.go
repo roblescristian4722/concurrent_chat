@@ -12,7 +12,6 @@ import (
 
 const (
     KILL = iota
-    ADD
     MSG
 )
 
@@ -20,17 +19,23 @@ const (
 type Msg struct {
     Sender, Content string
     Type int
+    Id uint64
 }
-
 // Información de cada servidor tcp
 type Info struct {
     UserCount uint64
     Topic, TcpAddr, RpcAddr string
+    Id uint64
 }
 // Representa los datos de cada servidor RPC (sus mensajes almacenados y su info)
 type Server struct {
     MsgStored []Msg
     Info Info
+    Active []*net.Conn
+}
+type ClientData struct {
+    MsgStored []Msg
+    Id uint64
 }
 // Map que guarda un puntero hacía la instancia de un servidor TCP, cada uno tiene
 // asociada una key que es la dirección url del servidor RPC asociado
@@ -38,7 +43,6 @@ type ServerInstances map[string] *Server
 // Instancia singleton para poder acceder a las instancias del server en cualquier
 // parte del programa
 var RpcIns *ServerInstances
-var Active []*net.Conn
 
 func (t *ServerInstances) GetServerInfo(url *string, res *Info) error {
     *(res) = (*(*t)[*url]).Info
@@ -68,7 +72,6 @@ func handleTCP(rpc string) {
         fmt.Println(err)
         return
     }
-    go handlePetitionType(client_status)
     for {
         c, err := ln.Accept()
         if err != nil {
@@ -79,32 +82,50 @@ func handleTCP(rpc string) {
     }
 }
 
-func handlePetitionType(client_status chan Msg) {
-    
-}
-
+// Función que gestiona a cada cliente de cada servidor TCP
 func handleClient(c net.Conn, rpc string, client_status chan Msg) {
-    defer c.Close()
-    (*(*RpcIns)[rpc]).Info.UserCount++
-    Active = append(Active, &c)
-    msg := Msg{}
+    (*RpcIns)[rpc].Info.UserCount++
+    // goroutine para terminar la conexión con un cliente en concreto
+    go handleConn(client_status, &c, (*RpcIns)[rpc].Info.Id, rpc)
+    // Como el usuario se conecta por primera vez con el servidor se le asigna
+    // un id y se le envían los mensajes guardados hasta el momento
+    gob.NewEncoder(c).Encode(&ClientData{ Id: (*RpcIns)[rpc].Info.Id, MsgStored: (*RpcIns)[rpc].MsgStored })
+    (*RpcIns)[rpc].Info.Id++
+    (*(*RpcIns)[rpc]).Active = append((*(*RpcIns)[rpc]).Active, &c)
     for {
+        msg := Msg{}
         err := gob.NewDecoder(c).Decode(&msg)
         if err == nil {
             switch msg.Type {
             case KILL:
-                for i, v := range Active {
-                    if v == &c {
-                        Active = append(Active[:i], Active[i + 1:]...)
-                        break
-                    }
-                }
-                (*(*RpcIns)[rpc]).Info.UserCount--
-                break
-            case ADD:
-
+                // Si se recibe una señal para terminar la conexión usamos la
+                // goroutine para terminar al cliente correcto
+                client_status <- msg
+                return
             case MSG:
+                (*(*RpcIns)[rpc]).MsgStored = append((*(*RpcIns)[rpc]).MsgStored, msg)
+                for _, v := range (*(*RpcIns)[rpc]).Active {
+                    gob.NewEncoder(*v).Encode(&msg)
+                }
+                fmt.Println((*(*RpcIns)[rpc]).MsgStored)
             }
+        }
+    }
+}
+
+// Goroutine que se ejecuta en paralelo a cada handleClient para terminar a un cliente
+func handleConn(client_status chan Msg, c *net.Conn, cId uint64, rpc string) {
+    for {
+        select {
+        case s := <-client_status:
+            if s.Type == KILL {
+                if s.Id == cId {
+                    (*RpcIns)[rpc].Info.UserCount--
+                    (*c).Close()
+                    return
+                }
+            }
+            client_status <- s
         }
     }
 }
